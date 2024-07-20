@@ -4,27 +4,36 @@ import { ModelType } from '@typegoose/typegoose/lib/types';
 import { UserModel } from 'src/user/user.model';
 import { AuthDto } from './dto/auth.dto';
 import { hash, genSalt, compare } from 'bcryptjs';
+import { JwtService } from '@nestjs/jwt';
 
 
 @Injectable()
 export class AuthService {
     constructor(
-        @InjectModel(UserModel) private readonly userModel : ModelType<UserModel>
+        @InjectModel(UserModel) private readonly userModel : ModelType<UserModel>,
+        private readonly jwtService: JwtService
     ) {}
 
 
     // Login point
-    async login(dto:AuthDto) :Promise<UserModel> {
-        return await this.validateUser(dto)
+    async login(dto:AuthDto)  {
+        const user = await this.validateUser(dto)
+
+        const tokens = await this.issueTokenPair(String(user._id))
+
+        return {
+            user: this.returnUserFileds(user),
+            ...tokens
+        }
     }
 
 
     // Register point
-    async register(dto:AuthDto) :Promise<UserModel> {
+    async register(dto:AuthDto) {
         const oldUser = await this.userModel.findOne({email: dto.email})
         if(oldUser) throw new BadRequestException('User with this email already exsisted')
         
-            
+
         const salt = await genSalt(10)
 
         const newUser = new this.userModel({
@@ -32,7 +41,12 @@ export class AuthService {
             password: await hash(dto.password, salt)
         })
 
-        return newUser.save()
+        const tokens = await this.issueTokenPair(String(newUser._id))
+
+        return {
+            user: this.returnUserFileds(newUser),
+            ...tokens
+        }
     }
 
     // Validate login point
@@ -47,4 +61,29 @@ export class AuthService {
 
         return user
     }
+
+
+    // Generate Token Pair
+    async issueTokenPair(userId:string) {
+        const data = {_id: userId}
+
+        const refreshToken = await this.jwtService.signAsync(data, {
+            expiresIn: '15d'
+        })
+
+        const accesToken = await this.jwtService.signAsync(data, {
+            expiresIn: '1h'
+        })
+
+        return {refreshToken, accesToken}
+    }
+
+    returnUserFileds(user : UserModel) {
+        return {
+            _id: user._id,
+            email: user.email,
+            isAdmin: user.isAdmin
+        }
+    }
+
 }
