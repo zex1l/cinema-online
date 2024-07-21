@@ -11,7 +11,7 @@ export class UserModel extends TimeStamps {
     password : string
 
     @prop({default: false})
-    isAdmin?: string
+    isAdmin?: boolean
 
     @prop({default: []})
     favorites ?: []
